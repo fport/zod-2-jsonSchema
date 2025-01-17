@@ -11,7 +11,10 @@
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.1.5"
+    "next": "15.1.5",
+    "zod": "^3.22.4",
+    "@monaco-editor/react": "^4.6.0",
+    "monaco-editor": "^0.45.0"
   },
   "devDependencies": {
     "typescript": "^5",
