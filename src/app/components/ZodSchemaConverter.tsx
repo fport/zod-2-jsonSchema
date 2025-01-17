@@ -10,17 +10,21 @@ interface JsonSchemaType {
   minimum?: number;
   maximum?: number;
   enum?: string[];
-  default?: any;
+  default?: unknown;
   properties?: Record<string, JsonSchemaType>;
   required?: string[];
   items?: JsonSchemaType;
 }
 
-const zodToJsonSchema = (schema: z.ZodType<any>): JsonSchemaType => {
+type ZodStringCheck = { kind: string; value?: unknown };
+type ZodNumberCheck = { kind: string; value: number };
+
+const zodToJsonSchema = (schema: z.ZodTypeAny): JsonSchemaType => {
   if (schema instanceof z.ZodString) {
     const base: JsonSchemaType = { type: 'string' };
-    if (schema._def.checks) {
-      for (const check of schema._def.checks) {
+    const checks = schema._def.checks as ZodStringCheck[] | undefined;
+    if (checks) {
+      for (const check of checks) {
         if (check.kind === 'email') base.format = 'email';
         if (check.kind === 'url') base.format = 'uri';
       }
@@ -30,8 +34,9 @@ const zodToJsonSchema = (schema: z.ZodType<any>): JsonSchemaType => {
 
   if (schema instanceof z.ZodNumber) {
     const base: JsonSchemaType = { type: 'number' };
-    if (schema._def.checks) {
-      for (const check of schema._def.checks) {
+    const checks = schema._def.checks as ZodNumberCheck[] | undefined;
+    if (checks) {
+      for (const check of checks) {
         if (check.kind === 'min') base.minimum = check.value;
         if (check.kind === 'max') base.maximum = check.value;
       }
@@ -46,7 +51,7 @@ const zodToJsonSchema = (schema: z.ZodType<any>): JsonSchemaType => {
   if (schema instanceof z.ZodEnum) {
     return {
       type: 'string',
-      enum: schema._def.values,
+      enum: schema._def.values as string[],
     };
   }
 
@@ -55,10 +60,11 @@ const zodToJsonSchema = (schema: z.ZodType<any>): JsonSchemaType => {
   }
 
   if (schema instanceof z.ZodDefault) {
-    const innerSchema: JsonSchemaType = zodToJsonSchema(schema._def.innerType);
+    const innerSchema = zodToJsonSchema(schema._def.innerType);
+    const defaultValue = schema._def.defaultValue();
     return {
       ...innerSchema,
-      default: schema._def.defaultValue(),
+      default: defaultValue,
     };
   }
 
@@ -66,12 +72,11 @@ const zodToJsonSchema = (schema: z.ZodType<any>): JsonSchemaType => {
     const properties: Record<string, JsonSchemaType> = {};
     const required: string[] = [];
 
-    for (const [key, value] of Object.entries(schema.shape)) {
-      if (value instanceof z.ZodType) {
-        properties[key] = zodToJsonSchema(value);
-        if (!(value instanceof z.ZodOptional)) {
-          required.push(key);
-        }
+    const shape = schema.shape as Record<string, z.ZodTypeAny>;
+    for (const [key, value] of Object.entries(shape)) {
+      properties[key] = zodToJsonSchema(value);
+      if (!(value instanceof z.ZodOptional)) {
+        required.push(key);
       }
     }
 
@@ -115,7 +120,7 @@ export default function ZodSchemaConverter() {
       setError(null);
       
       // Create a safe evaluation context
-      const safeEval = new Function('z', `return ${zodInput}`);
+      const safeEval = new Function('z', `return ${zodInput}`) as (zodLib: typeof z) => z.ZodTypeAny;
       const zodSchema = safeEval(z);
       
       if (!(zodSchema instanceof z.ZodType)) {
