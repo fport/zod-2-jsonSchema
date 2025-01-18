@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 
 interface JsonSchemaType {
-  type: string;
+  type: string | string[];
   format?: string;
   minimum?: number;
   maximum?: number;
@@ -14,12 +14,24 @@ interface JsonSchemaType {
   properties?: Record<string, JsonSchemaType>;
   required?: string[];
   items?: JsonSchemaType;
+  nullable?: boolean;
 }
 
 type ZodStringCheck = { kind: string; value?: unknown };
 type ZodNumberCheck = { kind: string; value: number };
 
 const zodToJsonSchema = (schema: z.ZodTypeAny): JsonSchemaType => {
+  // Handle nullable types
+  if (schema instanceof z.ZodNullable) {
+    const innerSchema = zodToJsonSchema(schema._def.innerType);
+    return {
+      ...innerSchema,
+      type: Array.isArray(innerSchema.type) 
+        ? [...innerSchema.type, 'null']
+        : [innerSchema.type, 'null'],
+    };
+  }
+
   if (schema instanceof z.ZodString) {
     const base: JsonSchemaType = { type: 'string' };
     const checks = schema._def.checks as ZodStringCheck[] | undefined;
@@ -42,6 +54,10 @@ const zodToJsonSchema = (schema: z.ZodTypeAny): JsonSchemaType => {
       }
     }
     return base;
+  }
+
+  if (schema instanceof z.ZodBoolean) {
+    return { type: 'boolean' };
   }
 
   if (schema instanceof z.ZodDate) {
@@ -75,7 +91,7 @@ const zodToJsonSchema = (schema: z.ZodTypeAny): JsonSchemaType => {
     const shape = schema.shape as Record<string, z.ZodTypeAny>;
     for (const [key, value] of Object.entries(shape)) {
       properties[key] = zodToJsonSchema(value);
-      if (!(value instanceof z.ZodOptional)) {
+      if (!(value instanceof z.ZodOptional) && !(value instanceof z.ZodNullable)) {
         required.push(key);
       }
     }
@@ -88,9 +104,10 @@ const zodToJsonSchema = (schema: z.ZodTypeAny): JsonSchemaType => {
   }
 
   if (schema instanceof z.ZodArray) {
+    const itemSchema = zodToJsonSchema(schema._def.type);
     return {
       type: 'array',
-      items: zodToJsonSchema(schema._def.type),
+      items: itemSchema,
     };
   }
 
