@@ -14,7 +14,7 @@
     "next": "15.1.5",
     "zod": "^3.22.4",
     "@monaco-editor/react": "^4.6.0",
-    "monaco-editor": "^0.45.0"
+    "monaco-editor": "^0.52.2"
   },
   "devDependencies": {
     "typescript": "^5",
